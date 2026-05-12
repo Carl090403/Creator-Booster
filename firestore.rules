@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: profiles
+    // Document ID: userId
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required, 2-50 chars)
+    //   - email: string (required, email format)
+    //   - niche: string (optional)
+    //   - platform: string (required, enum: tiktok, facebook, both)
+    //   - onboarding_completed: bool (required)
+    //   - created_at: string (required, ISO 8601)
+    //
+    // Collection: generations
+    // Document ID: generationId
+    // Fields:
+    //   - id: string (required)
+    //   - user_id: string (required, matches auth.uid)
+    //   - tool: string (required, enum: hooks, script, ideas, calendar)
+    //   - niche: string (required)
+    //   - platform: string (required)
+    //   - input_data: map (required)
+    //   - output_data: map (required)
+    //   - created_at: string (required, ISO 8601)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidProfile(data) {
+      return data.keys().hasAll(['name', 'email', 'platform', 'onboarding_completed']) &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 50 &&
+             isValidEmail(data.email) &&
+             data.platform in ['tiktok', 'facebook', 'both'] &&
+             data.onboarding_completed is bool;
+    }
+
+    function isValidGeneration(data) {
+      return data.keys().hasAll(['user_id', 'tool', 'niche', 'platform', 'input_data', 'output_data', 'created_at']) &&
+             data.user_id == request.auth.uid &&
+             data.tool in ['hooks', 'script', 'ideas', 'calendar'] &&
+             data.niche is string &&
+             data.platform is string &&
+             data.input_data is map &&
+             data.output_data is map &&
+             isValidDateString(data.created_at);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /profiles/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidProfile(request.resource.data) && 
+                    request.resource.data.email == resource.data.email;
+    }
+
+    match /generations/{generationId} {
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() && isValidGeneration(request.resource.data);
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+  }
+}
