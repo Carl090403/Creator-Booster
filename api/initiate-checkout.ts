@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         number: numberOnly,
         country_code: countryCode
       },
-      redirect_url: 'https://creator-booster-ia.netlify.app/dashboard?payment=success',
+      redirect_url: 'https://creator-booster.vercel.app/dashboard?payment=success',
       custom_metadata: {
         userId,
         pack,

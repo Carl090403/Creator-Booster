@@ -1,4 +1,5 @@
-import { adminDb } from './firebaseAdmin';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { adminDb } from './firebaseAdmin'; 
 import { FieldValue } from 'firebase-admin/firestore';
 
 const TOOL_COSTS: Record<string, number> = {
@@ -8,6 +9,7 @@ const TOOL_COSTS: Record<string, number> = {
   calendar: 2,
 };
 
+// --- TES FONCTIONS DE BASE REMISES ICI POUR CORRIGER L'ERREUR ROUGE ---
 const buildPrompt = (tool: string, params: Record<string, any>) => {
   const { niche, platform, topic, tone, hook, message, goal, duration } = params;
   const context = `Niche: ${niche || 'générique'}\nPlateforme: ${platform || 'both'}\n`; 
@@ -72,42 +74,40 @@ const extractJson = (text: string) => {
   }
 };
 
-export const handler = async (event: any) => {
+// --- HANDLER VERCEL ---
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const payload = JSON.parse(event.body || '{}');
-    const { userId, tool, params } = payload;
+    const { userId, tool, params } = req.body;
 
     if (!userId || !tool) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing userId or tool' }) };
+      return res.status(400).json({ error: 'Missing userId or tool' });
     }
 
     const requiredCost = TOOL_COSTS[tool];
     if (requiredCost === undefined) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid tool type' }) };
+      return res.status(400).json({ error: 'Invalid tool type' });
     }
 
     const userRef = adminDb.doc(`users/${userId}`);
     const userSnapshot = await userRef.get();
 
     if (!userSnapshot.exists) {
-      return { statusCode: 404, body: JSON.stringify({ error: 'User not found' }) };
+      return res.status(404).json({ error: 'User not found' });
     }
 
     const userData = userSnapshot.data() as any;
     const currentCredits = userData.credits ?? 0;
 
     if (currentCredits < requiredCost) {
-      return {
-        statusCode: 402,
-        body: JSON.stringify({ error: 'INSUFFICIENT_CREDITS' }),
-      };
+      return res.status(402).json({ error: 'INSUFFICIENT_CREDITS' });
     }
 
     const prompt = buildPrompt(tool, params || {});
+    
     const aiResponse = await fetch('https://generativeai.googleapis.com/v1beta2/models/gemini-flash-latest:generate', {
       method: 'POST',
       headers: {
@@ -123,10 +123,7 @@ export const handler = async (event: any) => {
 
     if (!aiResponse.ok) {
       const errorData = await aiResponse.text();
-      return {
-        statusCode: 502,
-        body: JSON.stringify({ error: 'Gemini API error', details: errorData }),
-      };
+      return res.status(502).json({ error: 'Gemini API error', details: errorData });
     }
 
     const aiData = await aiResponse.json();
@@ -136,10 +133,7 @@ export const handler = async (event: any) => {
     try {
       parsedResult = extractJson(aiText);
     } catch (error: any) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'AI_RESPONSE_PARSE_FAILED', details: error.message }),
-      };
+      return res.status(500).json({ error: 'AI_RESPONSE_PARSE_FAILED', details: error.message });
     }
 
     await adminDb.runTransaction(async (transaction) => {
@@ -167,18 +161,13 @@ export const handler = async (event: any) => {
       });
     });
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ result: parsedResult }),
-    };
+    return res.status(200).json({ result: parsedResult });
+
   } catch (error: any) {
     console.error('Generate function error:', error);
     if (error.message === 'INSUFFICIENT_CREDITS') {
-      return {
-        statusCode: 402,
-        body: JSON.stringify({ error: 'INSUFFICIENT_CREDITS' }),
-      };
+      return res.status(402).json({ error: 'INSUFFICIENT_CREDITS' });
     }
-    return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Internal server error' }) };
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
-};
+}
