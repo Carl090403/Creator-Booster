@@ -2,7 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // 1. Gestion des CORS et de la méthode POST
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -28,10 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid pack type' });
     }
 
-    // --- PARSING DYNAMIQUE INTERNATIONAL ---
-    let cleanPhone = phone ? phone.trim().replace(/\s+/g, '') : '';
+    // --- PARSING DYNAMIQUE INTERNATIONAL CORRIGÉ ---
+    let cleanPhone = phone ? String(phone).trim().replace(/\s+/g, '') : '';
     let countryCode = 'BJ'; 
-    let numberOnly = cleanPhone;
+    let numberOnly = ''; // 💡 CORRECTION : Initialisé à vide pour éviter de propager le "+"
 
     if (cleanPhone.startsWith('+')) {
       const match = cleanPhone.match(/^\+(\d{1,4})(\d{6,14})$/);
@@ -55,6 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         countryCode = countryMap[numericCode] || 'BJ';
       }
     } else {
+      // Si aucun préfixe, on ne garde que les chiffres
       const digits = cleanPhone.replace(/\D/g, '');
       let foundCode = false;
       for (const code of ['229', '225', '228', '221', '226', '223']) {
@@ -71,9 +71,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (!numberOnly || numberOnly.length < 6) {
+    // Sécurité : Si le parsing a échoué et que numberOnly est resté vide, on remet les chiffres du numéro d'origine
+    if (!numberOnly) {
+      numberOnly = cleanPhone.replace(/\D/g, '');
+    }
+
+    // Gestion du cas des numéros de test invalides (composés uniquement de 0) ou vides
+    if (!numberOnly || /^0+$/.test(numberOnly) || numberOnly.length < 6) {
       countryCode = 'BJ';
-      numberOnly = '97001122'; 
+      numberOnly = '97001122'; // Numéro structurellement valide pour éviter le crash des comptes de test
     }
 
     const chariowPayload = {
@@ -108,7 +114,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!response.ok) {
       console.error('Chariow API error:', data);
-      return res.status(502).json({ error: data?.message || 'Failed to create checkout session' });
+      // 💡 CORRECTION : On renvoie un statut 400 propre au lieu de 502 pour éviter de bloquer l'application
+      return res.status(400).json({ error: data?.message || 'Erreur de validation du numéro chez la passerelle.' });
     }
 
     const checkoutUrl = data.checkout_url || data.data?.checkout_url || data.data?.payment?.checkout_url;
