@@ -7,18 +7,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Sidebar from '@/components/layout/Sidebar';
 import { useAppStore } from '@/stores/appStore';
-import { apiService } from '@/services/api';
+
+// Type strict pour les identifiants de pack
+type PackId = 'starter' | 'createur' | 'pro';
 
 const PRICING_PACKS = [
   {
-    id: 'starter',
+    id: 'starter' as PackId,
     title: 'Pack Starter',
     price: 3000,
     credits: 50,
     description: 'Idéal pour démarrer rapidement avec des contenus puissants.',
   },
   {
-    id: 'createur',
+    id: 'createur' as PackId,
     title: 'Pack Créateur',
     price: 7000,
     credits: 150,
@@ -26,7 +28,7 @@ const PRICING_PACKS = [
     popular: true,
   },
   {
-    id: 'pro',
+    id: 'pro' as PackId,
     title: 'Pack Pro',
     price: 14000,
     credits: 350,
@@ -34,54 +36,38 @@ const PRICING_PACKS = [
   },
 ];
 
+// 🔗 LIENS VERS LES PAGES PRODUITS CHARIOW
+const CHARIOW_PRODUCT_URLS: Record<PackId, string> = {
+  starter: 'https://dotqipmz.mychariow.shop/prd_gv95mbx7',
+  createur: 'https://dotqipmz.mychariow.shop/prd_y6upez7f',
+  pro: 'https://dotqipmz.mychariow.shop/prd_huuxea9m',
+};
+
 export default function PricingPage() {
   const navigate = useNavigate();
   const { user } = useAppStore();
-  const [selectedPack, setSelectedPack] = useState(PRICING_PACKS[1]);
-  const [isLoading, setIsLoading] = useState(false);
+  
+  // 💡 CORRECTION ANTI-TRADUCTION : On ne stocke que l'ID technique ('starter' | 'createur' | 'pro')
+  const [selectedPackId, setSelectedPackId] = useState<PackId>('createur');
 
-  const defaultPhone = '+22900000000';
+  // Récupération dynamique des données du pack sélectionné à des fins d'affichage
+  const selectedPack = PRICING_PACKS.find((p) => p.id === selectedPackId) || PRICING_PACKS[1];
 
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     if (!user) {
       toast.error('Utilisateur non connecté.');
       return;
     }
 
-    const currentEmail = (user.email || '').trim();
-    const fallbackName = currentEmail ? currentEmail.split('@')[0] : 'Client';
-    const [rawFirstName = '', rawLastName = ''] = (user.name || '').split(' ');
-    const currentFirstName = rawFirstName && !rawFirstName.includes('@') ? rawFirstName.trim() : fallbackName.trim();
-    const currentLastName = rawLastName && !rawLastName.includes('@') ? rawLastName.trim() : 'Booster';
-    const currentPhone = defaultPhone;
+    const targetUrl = CHARIOW_PRODUCT_URLS[selectedPackId];
 
-    if (!currentEmail) {
-      toast.error('Email manquant dans le profil utilisateur.');
+    if (!targetUrl || targetUrl.includes('ton-lien-page')) {
+      toast.error('La page de ce produit n’est pas encore configurée.');
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const payload = {
-        pack: selectedPack.id.trim() as 'starter' | 'createur' | 'pro',
-        userId: user.id || currentEmail,
-        email: currentEmail,
-        firstName: currentFirstName || 'Client',
-        lastName: currentLastName || 'Booster',
-        phone: currentPhone,
-      };
-
-      console.log('📤 Tentative de checkout avec payload:', payload);
-
-      const checkoutUrl = await apiService.initiateCheckout(payload);
-
-      window.location.href = checkoutUrl;
-    } catch (error: any) {
-      console.error('Erreur checkout:', error);
-      toast.error(error?.message || 'Impossible de démarrer le paiement.');
-    } finally {
-      setIsLoading(false);
-    }
+    // Redirection vers ta page produit personnalisée sur Chariow dans un nouvel onglet
+    window.open(targetUrl, '_blank');
   };
 
   return (
@@ -121,8 +107,12 @@ export default function PricingPage() {
                 {PRICING_PACKS.map((pack) => (
                   <Card
                     key={pack.id}
-                    onClick={() => setSelectedPack(pack)}
-                    className={`cursor-pointer border-2 transition-all ${selectedPack.id === pack.id ? 'border-[#7C3AED] bg-[#1F1B3A]' : 'border-[#1E1E3A] bg-[#12121F] hover:border-[#7C3AED]/70'}`}
+                    onClick={() => setSelectedPackId(pack.id)}
+                    className={`cursor-pointer border-2 transition-all ${
+                      selectedPackId === pack.id 
+                        ? 'border-[#7C3AED] bg-[#1F1B3A]' 
+                        : 'border-[#1E1E3A] bg-[#12121F] hover:border-[#7C3AED]/70'
+                    }`}
                   >
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between gap-2 mb-4">
@@ -160,20 +150,19 @@ export default function PricingPage() {
                 </div>
                 <Button
                   onClick={handleCheckout}
-                  disabled={isLoading}
                   className="mt-6 w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white"
                 >
-                  {isLoading ? 'Redirection en cours...' : 'Acheter ce pack'}
+                  Acheter ce pack
                 </Button>
               </Card>
 
               <Card className="bg-[#0F172A] border-[#1E293B] p-6">
                 <h3 className="text-lg font-semibold mb-3">Comment ça marche ?</h3>
                 <ul className="space-y-3 text-sm text-[#cbd5e1]">
-                  <li>• Le paiement est traité par Chariow en toute sécurité.</li>
-                  <li>• Après achat, vous revenez au dashboard avec un message de succès.</li>
-                  <li>• Le crédit est automatiquement ajouté à votre compte via webhook.</li>
-                  <li>• Vous pouvez ensuite générer du contenu IA immédiatement.</li>
+                  <li>• Le paiement est traité par <strong>Chariow</strong> en toute sécurité.</li>
+                  <li>• Après votre achat, vous êtes automatiquement redirigé vers votre tableau de bord.</li>
+                  <li>• Les crédits sont ajoutés à votre compte <strong>de manière instantanée</strong>.</li>
+                  <li>• Vous pouvez ensuite générer votre contenu  immédiatement.</li>
                 </ul>
               </Card>
             </section>

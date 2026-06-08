@@ -152,7 +152,7 @@ export default function LandingPage() {
               <ul className="space-y-2 text-sm text-[#94A3B8]">
                 <li><Link to="#" className="hover:text-[#F1F5F9]">Confidentialité</Link></li>
                 <li><Link to="#" className="hover:text-[#F1F5F9]">CGU</Link></li>
-                <li><Link to="#" className="hover:text-[#F1F5F9]">Contact</Link></li>
+                <li><Link to="/contact" className="hover:text-[#F1F5F9]">Contact</Link></li>
               </ul>
             </div>
           </div>
