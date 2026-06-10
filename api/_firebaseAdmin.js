@@ -19,7 +19,7 @@ if (!admin.apps.length) {
     });
     
     console.log("🔥 Firebase Admin initialisé avec succès en production.");
-  } catch (error: any) {
+  } catch (error) {
     console.error("❌ Erreur critique lors de l'initialisation de Firebase Admin:", error.message);
     throw error;
   }
