@@ -1,19 +1,21 @@
-
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore'; // Recommence à utiliser getFirestore
+
 const firebaseConfig = {
-  apiKey: "AIzaSyBaJ0a1Iq2O4tcKN80BndjeUwSfLR6qy_w",
-  authDomain: "gen-lang-client-0998329295.firebaseapp.com",
-  projectId: "gen-lang-client-0998329295",
-  storageBucket: "gen-lang-client-0998329295.firebasestorage.app",
-  messagingSenderId: "314161268168",
-  appId: "1:314161268168:web:eaafb9e2af9b31337eecfd"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+// Initialisation de l'application
 const app = initializeApp(firebaseConfig);
-const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID;
-export const db = databaseId
-  ? getFirestore(app, databaseId)
+
+// 💡 CORRECTION : On passe l'ID de la base de données directement en 2e argument !
+const dbId = import.meta.env.VITE_FIREBASE_DATABASE_ID;
+
+export const db = dbId 
+  ? getFirestore(app, dbId) 
   : getFirestore(app);
-export const auth = getAuth(app);

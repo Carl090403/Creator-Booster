@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-// 💡 CORRECTION DU CRASH : Ajout explicite de l'extension pour le moteur ESM de Vercel
 import { adminDb } from './_firebaseAdmin.js'; 
 import { FieldValue } from 'firebase-admin/firestore';
 
