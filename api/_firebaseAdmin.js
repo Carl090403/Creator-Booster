@@ -3,32 +3,28 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 if (getApps().length === 0) {
   try {
-    let serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    if (!serviceAccountVar) {
-      throw new Error("La variable d'environnement FIREBASE_SERVICE_ACCOUNT est manquante !");
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error("Variables d'environnement Firebase Admin incomplètes sur Vercel !");
     }
 
-    // 💡 NETTOYAGE ULTRA-ROBUSTE : On remplace les vrais sauts de ligne physiques par des "\n" textuels
-    // et on vire les caractères de contrôle qui font planter JSON.parse
-    serviceAccountVar = serviceAccountVar
-      .replace(/\r?\n/g, '\\n') // Transforme les sauts de ligne physiques en "\n"
-      .replace(/\\n/g, '\n');    // Puis les remet au format attendu par la clé privée
-
-    // Optionnel : Si Vercel a entouré la chaîne de guillemets doubles en trop
-    if (serviceAccountVar.startsWith('"') && serviceAccountVar.endsWith('"')) {
-      serviceAccountVar = serviceAccountVar.slice(1, -1);
-    }
-
-    const serviceAccount = JSON.parse(serviceAccountVar);
+    // Remplacement propre des sauts de ligne textuels
+    const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
 
     initializeApp({
-      credential: cert(serviceAccount),
+      credential: cert({
+        projectId: projectId,
+        clientEmail: clientEmail,
+        privateKey: formattedPrivateKey,
+      }),
     });
     
-    console.log("🔥 Firebase Admin initialisé avec succès !");
+    console.log("🔥 Firebase Admin initialisé sans JSON.parse !");
   } catch (error) {
-    console.error("❌ Erreur critique lors de l'initialisation de Firebase Admin:", error.message);
+    console.error("❌ Erreur critique Firebase Admin:", error.message);
     throw error;
   }
 }
