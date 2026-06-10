@@ -81,8 +81,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { userId, tool, params } = req.body;
 
-    if (!userId || !tool) {
-      return res.status(400).json({ error: 'Missing userId or tool' });
+    // 💡 LOG DE DIAGNOSTIC : Savoir précisément ce que le client transmet
+    console.log(`[BACKEND DEBUG] Requête reçue pour l'outil: "${tool}". ID Utilisateur fourni: "${userId}" (Type: ${typeof userId})`);
+
+    if (!userId || !tool || String(userId).trim() === '' || userId === 'undefined') {
+      console.error('[BACKEND ERROR] L\'ID utilisateur fourni est invalide ou indéfini.');
+      return res.status(400).json({ error: 'Missing or invalid userId or tool' });
     }
 
     const requiredCost = TOOL_COSTS[tool];
@@ -90,16 +94,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid tool type' });
     }
 
-    // Validation de la clé API Gemini avant d'appeler l'endpoint externe
     if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({ error: 'Missing GEMINI_API_KEY environment variable on Vercel' });
     }
 
+    // Ciblage du document utilisateur
     const userRef = adminDb.doc(`users/${userId}`);
-    const userSnapshot = await userRef.get();
+    let userSnapshot;
+
+    try {
+      // Tentative de récupération des données de l'utilisateur
+      userSnapshot = await userRef.get();
+    } catch (firestoreError: any) {
+      console.error(`[FIRESTORE CRASH] Échec lors de userRef.get() pour le chemin "users/${userId}". Code d'erreur gRPC:`, firestoreError.code);
+      console.error('Détails complets de l\'erreur Firestore:', firestoreError);
+      return res.status(500).json({ 
+        error: 'DATABASE_FETCH_FAILED', 
+        details: firestoreError.message,
+        suggestion: 'Vérifiez la correspondance entre l\'ID de base de données configuré dans firebaseAdmin et votre console.' 
+      });
+    }
 
     if (!userSnapshot.exists) {
-      return res.status(404).json({ error: 'User not found' });
+      console.warn(`[BACKEND WARN] Aucun document trouvé dans la collection "users" pour l'ID: "${userId}"`);
+      return res.status(404).json({ error: 'User not found in database' });
     }
 
     const userData = userSnapshot.data() as any;
@@ -111,7 +129,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const prompt = buildPrompt(tool, params || {});
     
-    // 🔥 MODIFICATION ICI : Passage sur l'endpoint v1 stable global pour éliminer le NOT_FOUND (Error 5)
     const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
