@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore'; // Recommence à utiliser getFirestore
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth'; // 💡 1. N'oublie pas d'importer getAuth
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,7 +14,10 @@ const firebaseConfig = {
 // Initialisation de l'application
 const app = initializeApp(firebaseConfig);
 
-// 💡 CORRECTION : On passe l'ID de la base de données directement en 2e argument !
+// 💡 2. Initialise et exporte 'auth' pour authService.ts
+export const auth = getAuth(app);
+
+// Configuration de Firestore avec l'ID spécifique
 const dbId = import.meta.env.VITE_FIREBASE_DATABASE_ID;
 
 export const db = dbId 
