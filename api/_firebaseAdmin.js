@@ -1,6 +1,8 @@
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-if (!admin.apps.length) {
+// 💡 CORRECTION : Utilisation de getApps() à la place de admin.apps.length
+if (getApps().length === 0) {
   try {
     const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
 
@@ -8,21 +10,22 @@ if (!admin.apps.length) {
       throw new Error("La variable d'environnement FIREBASE_SERVICE_ACCOUNT est manquante !");
     }
 
-    // 💡 SÉCURITÉ : Nettoyage des retours à la ligne brisés qui font planter Vercel
+    // Nettoyage des retours à la ligne brisés pour Vercel
     const cleanedServiceAccount = serviceAccountVar.replace(/\\n/g, '\n');
     
-    // Essai de parsing du JSON
+    // Parsing du JSON
     const serviceAccount = JSON.parse(cleanedServiceAccount);
 
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    initializeApp({
+      credential: cert(serviceAccount),
     });
     
-    console.log("🔥 Firebase Admin initialisé avec succès en production.");
+    console.log("🔥 Firebase Admin initialisé avec succès (Format Modulaire ESM).");
   } catch (error) {
     console.error("❌ Erreur critique lors de l'initialisation de Firebase Admin:", error.message);
     throw error;
   }
 }
 
-export const adminDb = admin.firestore();
+// Exportation propre de la base de données de la même manière qu'avant
+export const adminDb = getFirestore();
