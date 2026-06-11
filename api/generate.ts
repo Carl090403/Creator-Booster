@@ -177,12 +177,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 2. Appel à l'API Gemini
+    // 2. Appel à l'API Gemini (Version ultra-compatible)
     const prompt = buildPrompt(tool, params || {});
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+    
+    console.log("[GEMINI] Envoi du prompt à l'API...");
+
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ 
+          parts: [{ text: prompt }] 
+        }],
         generationConfig: {
           temperature: 0.7,
           maxOutputTokens: 2500,
@@ -192,8 +200,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!aiResponse.ok) {
-      const errorData = await aiResponse.json().catch(() => ({}));
-      return res.status(502).json({ error: 'Gemini API error', details: errorData?.error?.message });
+      const errorText = await aiResponse.text();
+      console.error('[GEMINI ERROR] Code:', aiResponse.status, 'Détails:', errorText);
+      return res.status(502).json({ error: 'Gemini API error', status: aiResponse.status, details: errorText });
     }
 
     const aiData = await aiResponse.json();
