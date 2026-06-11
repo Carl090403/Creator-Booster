@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { adminDb } from './_firebaseAdmin.js'; 
+import { getAdminDb } from './_firebaseAdmin.js'; 
 import { FieldValue } from 'firebase-admin/firestore';
 
 const TOOL_COSTS: Record<string, number> = {
@@ -81,11 +81,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { userId, tool, params } = req.body;
 
-    // 💡 LOG DE DIAGNOSTIC : Savoir précisément ce que le client transmet
-    console.log(`[BACKEND DEBUG] Requête reçue pour l'outil: "${tool}". ID Utilisateur fourni: "${userId}" (Type: ${typeof userId})`);
+    console.log(`[BACKEND DEBUG] Requête reçue pour l'outil: "${tool}". ID Utilisateur fourni: "${userId}"`);
 
     if (!userId || !tool || String(userId).trim() === '' || userId === 'undefined') {
-      console.error('[BACKEND ERROR] L\'ID utilisateur fourni est invalide ou indéfini.');
       return res.status(400).json({ error: 'Missing or invalid userId or tool' });
     }
 
@@ -98,25 +96,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Missing GEMINI_API_KEY environment variable on Vercel' });
     }
 
-    // Ciblage du document utilisateur
-    const userRef = adminDb.doc(`users/${userId}`);
+    // 💡 MODIFICATION ICI : On appelle getAdminDb() à l'intérieur du handler
+    const db = getAdminDb();
+    const userRef = db.doc(`users/${userId}`);
     let userSnapshot;
 
     try {
-      // Tentative de récupération des données de l'utilisateur
       userSnapshot = await userRef.get();
     } catch (firestoreError: any) {
-      console.error(`[FIRESTORE CRASH] Échec lors de userRef.get() pour le chemin "users/${userId}". Code d'erreur gRPC:`, firestoreError.code);
-      console.error('Détails complets de l\'erreur Firestore:', firestoreError);
-      return res.status(500).json({ 
-        error: 'DATABASE_FETCH_FAILED', 
-        details: firestoreError.message,
-        suggestion: 'Vérifiez la correspondance entre l\'ID de base de données configuré dans firebaseAdmin et votre console.' 
-      });
+      console.error(`[FIRESTORE CRASH] Échec lors de userRef.get() pour le chemin "users/${userId}".`);
+      return res.status(500).json({ error: 'DATABASE_FETCH_FAILED', details: firestoreError.message });
     }
 
     if (!userSnapshot.exists) {
-      console.warn(`[BACKEND WARN] Aucun document trouvé dans la collection "users" pour l'ID: "${userId}"`);
       return res.status(404).json({ error: 'User not found in database' });
     }
 
@@ -131,13 +123,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
+        contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.7,
           maxOutputTokens: 2500,
@@ -148,29 +136,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!aiResponse.ok) {
       const errorData = await aiResponse.json().catch(() => ({}));
-      console.error('Gemini Raw Error:', errorData);
-      return res.status(502).json({ 
-        error: 'Gemini API error', 
-        code: aiResponse.status, 
-        details: errorData?.error?.message || 'Unknown Gemini error' 
-      });
+      return res.status(502).json({ error: 'Gemini API error', details: errorData?.error?.message });
     }
 
     const aiData = await aiResponse.json();
     const aiText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    if (!aiText) {
-      return res.status(502).json({ error: 'EMPTY_AI_RESPONSE', details: 'Gemini returned an empty text content.' });
-    }
+    let parsedResult = extractJson(aiText);
 
-    let parsedResult;
-    try {
-      parsedResult = extractJson(aiText);
-    } catch (error: any) {
-      return res.status(500).json({ error: 'AI_RESPONSE_PARSE_FAILED', details: error.message, rawText: aiText });
-    }
-
-    await adminDb.runTransaction(async (transaction) => {
+    // 💡 MODIFICATION ICI : On utilise aussi "db" pour la transaction
+    await db.runTransaction(async (transaction) => {
       const freshUserSnapshot = await transaction.get(userRef);
       const freshCredits = freshUserSnapshot.data()?.credits ?? 0;
 
@@ -183,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         totalCreditsUsed: FieldValue.increment(requiredCost),
       });
 
-      const generationRef = adminDb.collection('generations').doc();
+      const generationRef = db.collection('generations').doc();
       transaction.set(generationRef, {
         user_id: userId,
         tool,

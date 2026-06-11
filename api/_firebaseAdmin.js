@@ -40,4 +40,4 @@ if (getApps().length === 0) {
   }
 }
 
-export const adminDb = getFirestore();
+export const getAdminDb = () => getFirestore();
