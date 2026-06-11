@@ -20,6 +20,7 @@ import { authService } from '@/services/authService';
 import { apiService } from '@/services/api';
 import { NICHES } from '@/config/constants';
 import toast from 'react-hot-toast';
+import { jsPDF } from 'jspdf';
 
 export default function ToolsPage() {
   const { toolId } = useParams<{ toolId: string }>();
