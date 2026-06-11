@@ -8,14 +8,14 @@ const TOOL_COSTS: Record<string, number> = {
   calendar: 2,
 };
 
-// 💡 Fonction d'assistance pour générer un jeton d'accès Google OAuth2 à partir de tes variables d'environnement
+// 💡 Fonction d'assistance pour générer un jeton d'accès Google OAuth2
 async function getGoogleAuthToken(clientEmail: string, privateKey: string): Promise<string> {
   const header = { alg: 'RS256', typ: 'JWT' };
   
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: clientEmail,
-    scope: 'https://www.googleapis.com/auth/datastore', // Donne accès à Firestore
+    scope: 'https://www.googleapis.com/auth/datastore',
     aud: 'https://oauth2.googleapis.com/token',
     exp: now + 3600,
     iat: now,
@@ -33,7 +33,6 @@ async function getGoogleAuthToken(clientEmail: string, privateKey: string): Prom
 
   const jwt = `${encodedHeader}.${encodedPayload}.${signature}`;
 
-  // Échange du JWT contre un jeton d'accès de courte durée auprès des serveurs Google
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -86,15 +85,16 @@ Objectif: ${goal || 'Inspirer et motiver'}\nHook: ${hook || 'Accroche forte'}\nM
 Objectif: ${goal || "Créer de l'engagement"}\nTon: ${tone || 'Inspirant'}`;
   }
 
+  // 💡 NOUVEAU PROMPT : Linéaire et textuel pour éviter les coupures sur 30 jours
   if (tool === 'calendar') {
-    return `${context}Crée un calendrier éditorial de 30 jours pour un compte créateur. Réponds uniquement par un JSON valide:
-{
-  "calendar": [
-    {"day": 1, "week": 1, "idea": "...", "hook": "...", "format": "...", "platform": "..."}
-  ]
-}
+    return `${context}Tu es un stratège de contenus créatifs. Crée un calendrier éditorial détaillé de 30 jours sous forme de liste textuelle linéaire et claire.
+Utilise TRÈS STRICTEMENT ce format pour chaque jour :
+Jour 1 : [Titre ou Idée] - [Description de l'action à faire] - [Plateforme]
+Jour 2 : [Titre ou Idée] - [Description de l'action à faire] - [Plateforme]
+... jusqu'au Jour 30 ou 31 dépendamment dans quel mois on se trouve.
 
-Objectif: ${goal || 'Planifier le contenu du mois'}\nDurée: ${duration || '30 jours'}`;
+Ne mets aucun autre texte d'introduction ou de conclusion. Aligne les jours les uns après les autres.
+Objectif: ${goal || 'Planifier le contenu du mois'}`;
   }
 
   return `${context}Réponds uniquement par un JSON valide contenant le résultat attendu.`;
@@ -141,7 +141,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Missing environment variables on Vercel' });
     }
 
-    // 💡 ÉTAPE CRUCIALE : Générer le Bearer Token d'authentification pour Firestore REST
     let authToken: string;
     try {
       authToken = await getGoogleAuthToken(clientEmail, privateKey);
@@ -176,20 +175,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(402).json({ error: 'INSUFFICIENT_CREDITS' });
     }
 
-   // 2. Appel à l'API Gemini (Version 2.5 Flash active dans ton projet)
     const prompt = buildPrompt(tool, params || {});
     
-    console.log("[GEMINI] Envoi du prompt au modèle gemini-2.5-flash-preview-05-20...");
+    console.log("[GEMINI] Envoi du prompt au modèle actif gemini-2.5-flash-preview-05-20...");
 
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+    // 💡 URL Mise à jour avec la version v1 officielle et le bon modèle actif de ta liste
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiKey}`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ 
-          parts: [{ text: prompt }] 
-        }]
+        contents: [{ parts: [{ text: prompt }] }]
       }),
     });
 
@@ -201,9 +196,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const aiData = await aiResponse.json();
     const aiText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsedResult = extractJson(aiText);
+    
+    // 💡 PARSING ADAPTATIF : Si c'est le calendrier, on garde le texte brut. Sinon, on parse le JSON.
+    let parsedResult: any;
+    if (tool === 'calendar') {
+      parsedResult = aiText;
+    } else {
+      parsedResult = extractJson(aiText);
+    }
 
-    // 3. Mise à jour des crédits (avec en-tête Authorization !)
+    // 3. Mise à jour des crédits
     const newCredits = currentCredits - requiredCost;
     const totalCreditsUsedValue = userDoc.fields?.totalCreditsUsed?.integerValue || userDoc.fields?.totalCreditsUsed?.doubleValue || "0";
     const newTotalUsed = parseInt(totalCreditsUsedValue, 10) + requiredCost;
@@ -226,7 +228,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[REST ERROR] Échec de la déduction de crédits:', await updateResponse.text());
     }
 
-    // 4. Enregistrement de l'historique de génération (avec en-tête Authorization !)
+    // 4. Enregistrement de l'historique de génération
     const firestoreGenUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/generations`;
     await fetch(firestoreGenUrl, {
       method: 'POST',
@@ -241,7 +243,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           niche: { stringValue: params?.niche || '' },
           platform: { stringValue: params?.platform || '' },
           created_at: { stringValue: new Date().toISOString() },
-          output_data_string: { stringValue: JSON.stringify(parsedResult) }
+          output_data_string: { stringValue: typeof parsedResult === 'string' ? parsedResult : JSON.stringify(parsedResult) }
         }
       })
     });

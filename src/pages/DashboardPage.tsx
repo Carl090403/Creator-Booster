@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Sparkles, TrendingUp, PenTool, Lightbulb, Calendar, ArrowRight, Clock, Loader2, Zap, CheckCircle, AlertCircle } from 'lucide-react';
+import { Sparkles, TrendingUp, PenTool, Lightbulb, Calendar, ArrowRight, Clock, Loader2, Zap, CheckCircle, AlertCircle, X, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,9 @@ export default function DashboardPage() {
   const [inspiration, setInspiration] = useState(DAILY_INSPIRATIONS[0]);
   const [paymentStatus, setPaymentStatus] = useState<'success' | 'pending' | 'failed' | null>(null);
   const [paymentMessage, setPaymentMessage] = useState('');
+  
+  // 💡 État pour stocker l'élément de l'historique en cours de consultation
+  const [selectedItem, setSelectedItem] = useState<any | null>(null);
 
   const { isLowBalance, remainingText } = useCredits(user?.credits || 0);
 
@@ -88,6 +91,70 @@ export default function DashboardPage() {
 
   const getToolLabel = (id: string) => {
     return tools.find(t => t.id === id)?.title || id;
+  };
+
+  // 💡 Fonction d'extraction et de rendu propre des données stockées dans l'historique
+  const renderHistoryContent = (item: any) => {
+    const data = item.outputData || item.output_data_string || item.output_data;
+    if (!data) return <p className="text-gray-400">Aucune donnée disponible pour cette génération.</p>;
+
+    // Scénario A : C'est le calendrier textuel linéaire (Chaîne brute)
+    if (item.tool === 'calendar' && typeof data === 'string') {
+      return (
+        <pre className="whitespace-pre-wrap font-sans text-gray-200 leading-relaxed text-sm bg-[#0A0A14] p-4 rounded-xl border border-[#1E1E3A]">
+          {data}
+        </pre>
+      );
+    }
+
+    // Scénario B : Données au format JSON (Hooks, Scripts, Idées)
+    try {
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      
+      if (parsed.hooks) {
+        return (
+          <div className="space-y-3">
+            {parsed.hooks.map((h: any, idx: number) => (
+              <div key={idx} className="p-3 rounded-lg bg-[#0A0A14] border border-[#1E1E3A]">
+                <p className="text-[#7C3AED] font-semibold text-sm">Accroche {idx + 1} : {h.hook}</p>
+                {h.framework && <p className="text-xs text-gray-400 mt-1">Structure : {h.framework}</p>}
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      if (parsed.ideas) {
+        return (
+          <div className="space-y-3">
+            {parsed.ideas.map((id: any, idx: number) => (
+              <div key={idx} className="p-3 rounded-lg bg-[#0A0A14] border border-[#1E1E3A]">
+                <p className="text-[#F59E0B] font-semibold text-sm">{id.title}</p>
+                <p className="text-xs text-gray-300 mt-1">{id.description}</p>
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      if (parsed.sections) {
+        return (
+          <div className="space-y-4">
+            {parsed.sections.map((sec: any, idx: number) => (
+              <div key={idx} className="p-3 rounded-lg bg-[#0A0A14] border border-[#1E1E3A]">
+                <span className="text-xs font-bold uppercase text-[#06B6D4]">{sec.label || `Séquence ${idx + 1}`}</span>
+                <p className="text-sm text-gray-200 mt-1 font-medium">{sec.content}</p>
+                {sec.visual_note && <p className="text-xs text-gray-400 italic mt-1">Note visuelle : {sec.visual_note}</p>}
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      return <pre className="text-xs text-gray-400 overflow-x-auto">{JSON.stringify(parsed, null, 2)}</pre>;
+    } catch {
+      return <p className="text-sm text-gray-200 whitespace-pre-wrap">{String(data)}</p>;
+    }
   };
 
   return (
@@ -252,7 +319,7 @@ export default function DashboardPage() {
                   <Loader2 className="w-8 h-8 text-[#7C3AED] animate-spin" />
                 </div>
               ) : history?.length > 0 ? (
-                history?.map((item, i) => (
+                history.map((item, i) => (
                   <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-[#12121F] border border-[#1E1E3A] hover:bg-[#1E1E3A] transition-colors">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-lg bg-[#1E1E3A] flex items-center justify-center">
@@ -260,12 +327,20 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <h4 className="font-bold text-sm">{getToolLabel(item.tool)}</h4>
-                        <p className="text-xs text-[#94A3B8]">{item.niche} • {new Date(item.created_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-[#94A3B8]">
+                          {item.niche || 'Générique'} • {item.created_at ? new Date(item.created_at).toLocaleDateString() : new Date(item.createdAt).toLocaleDateString()}
+                        </p>
                       </div>
                     </div>
-                    <Link to={`/tools/${item.tool}`}>
-                      <Button variant="ghost" size="sm" className="text-[#7C3AED] hover:bg-[#7C3AED]/10">Revoir</Button>
-                    </Link>
+                    {/* 💡 Remplacement du comportement par une ouverture de modale locale instantanée */}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-[#7C3AED] hover:bg-[#7C3AED]/10 flex items-center gap-1"
+                      onClick={() => setSelectedItem(item)}
+                    >
+                      <Eye className="w-4 h-4" /> Revoir
+                    </Button>
                   </div>
                 ))
               ) : (
@@ -275,6 +350,51 @@ export default function DashboardPage() {
               )}
             </div>
           </section>
+
+          {/* 💡 Panneau de prévisualisation de l'élément sélectionné (AnimatePresence) */}
+          <AnimatePresence>
+            {selectedItem && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-[#12121F] border border-[#1E1E3A] w-full max-w-2xl rounded-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+                >
+                  <div className="p-6 border-b border-[#1E1E3A] flex items-center justify-between bg-[#1E1E3A]/40">
+                    <div>
+                      <Badge className="bg-[#7C3AED]/20 text-[#7C3AED] border-[#7C3AED]/30 mb-1 capitalize">
+                        {selectedItem.tool}
+                      </Badge>
+                      <h3 className="text-xl font-bold">Travail archivé</h3>
+                    </div>
+                    <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/10" onClick={() => setSelectedItem(null)}>
+                      <X className="w-5 h-5" />
+                    </Button>
+                  </div>
+
+                  <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                    <div className="flex flex-wrap gap-4 text-xs text-[#94A3B8]">
+                      <div><span className="font-semibold text-white">Niche:</span> {selectedItem.niche || 'Générique'}</div>
+                      <div><span className="font-semibold text-white">Plateforme:</span> {selectedItem.platform || 'Toutes'}</div>
+                      <div><span className="font-semibold text-white">Date:</span> {new Date(selectedItem.created_at || selectedItem.createdAt).toLocaleString()}</div>
+                    </div>
+                    
+                    <div className="mt-4 border-t border-[#1E1E3A] pt-4">
+                      {renderHistoryContent(selectedItem)}
+                    </div>
+                  </div>
+
+                  <div className="p-4 border-t border-[#1E1E3A] bg-[#1E1E3A]/20 flex justify-end">
+                    <Button className="bg-[#7C3AED] hover:bg-[#6D28D9] text-white" onClick={() => setSelectedItem(null)}>
+                      Fermer la vue
+                    </Button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
         </div>
       </main>
     </div>
