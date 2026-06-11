@@ -180,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log("[GEMINI] Envoi du prompt au modèle actif gemini-2.5-flash-preview-05-20...");
 
     // 💡 URL Mise à jour avec la version v1 officielle et le bon modèle actif de ta liste
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiKey}`, {
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
